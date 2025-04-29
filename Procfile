@@ -1,1 +1,1 @@
-web: node server.js
+web: bash railway-run.sh
