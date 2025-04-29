@@ -1,0 +1,49 @@
+{
+  "name": "solana-marketplace-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "main": "server.js",
+  "bin": {
+    "solana-marketplace-app": "server.js"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "start": "node server.js",
+    "update-deps": "npm install --package-lock-only && npm install",
+    "railway": "npm install && npm run build && npm start",
+    "postinstall": "npm run build"
+  },
+  "dependencies": {
+    "@solana/wallet-adapter-base": "^0.9.23",
+    "@solana/wallet-adapter-react": "^0.15.34",
+    "@solana/wallet-adapter-react-ui": "^0.9.34",
+    "@solana/wallet-adapter-wallets": "^0.19.19",
+    "@solana/web3.js": "^1.78.4",
+    "express": "^4.18.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "serve": "^14.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^8.56.0",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@vitejs/plugin-react": "^4.2.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.4",
+    "globals": "^13.24.0",
+    "typescript": "^5.2.2",
+    "typescript-eslint": "^0.0.1-alpha.0",
+    "vite": "^5.0.0",
+    "vite-plugin-node-polyfills": "^0.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
