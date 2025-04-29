@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "start": "node server.js",
     "update-deps": "npm install --package-lock-only && npm install",
-    "railway": "npm install && npm run build && npm start",
+    "railway": "npm install && npm run build && node server.js",
     "postinstall": "npm run build"
   },
   "dependencies": {
@@ -43,7 +43,7 @@
     "vite-plugin-node-polyfills": "^0.16.0"
   },
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=18.0.0 <22.0.0",
     "npm": ">=9.0.0"
   }
 }
