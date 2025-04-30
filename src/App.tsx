@@ -1,5 +1,6 @@
 // Import React and useState hook
 import { useState, useEffect } from 'react';
+import * as web3 from '@solana/web3.js';
 
 // Define types for Phantom wallet
 interface PhantomWindow extends Window {
@@ -11,6 +12,8 @@ interface PhantomWindow extends Window {
     removeListener: (event: string, callback: Function) => void;
     isConnected: boolean;
     publicKey?: { toBase58: () => string };
+    signTransaction?: (transaction: web3.Transaction) => Promise<web3.Transaction>;
+    signAllTransactions?: (transactions: web3.Transaction[]) => Promise<web3.Transaction[]>;
   }
 }
 
@@ -29,6 +32,8 @@ interface NFTCard {
   progress?: number; // 0-100 percentage
   image?: string; // URL to NFT image
   mint?: string; // NFT mint address
+  collectionId?: string; // Collection ID for API calls
+  marketplaceUrl?: string; // Link to NFT on marketplace
 }
 
 // Helius API types
@@ -40,17 +45,27 @@ interface HeliusNFT {
       name: string;
       description: string;
       image: string;
+      attributes?: Array<{
+        trait_type: string;
+        value: string;
+      }>;
     }
   };
   grouping: {
     collection?: {
       name?: string;
+      id?: string;
     }
   };
   mint: string;
   ownership: {
     owner: string;
   };
+  creators?: Array<{
+    address: string;
+    verified: boolean;
+    share: number;
+  }>;
 }
 
 // NFT cache interface
@@ -101,13 +116,16 @@ const styles = {
   }
 };
 
+// Solana connection
+const connection = new web3.Connection('https://api.mainnet-beta.solana.com');
+
 function App() {
   // State for tracking wallet connection and address
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string>('');
   
   // State for active category tab
-  const [activeTab, setActiveTab] = useState<CategoryTab>('trending');
+  const [activeTab, setActiveTab] = useState<CategoryTab>('recently');
   
   // State for minting status
   const [mintingCards, setMintingCards] = useState<number[]>([]);
@@ -118,6 +136,9 @@ function App() {
   // State for loaded NFTs
   const [nftCards, setNftCards] = useState<NFTCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Collection floor prices from Magic Eden
+  const [floorPrices, setFloorPrices] = useState<{[key: string]: number}>({});
   
   // Mock NFT data as fallback
   const mockNftCards: NFTCard[] = [
@@ -240,6 +261,45 @@ function App() {
     }
   };
 
+  // Fetch floor prices from Magic Eden API
+  const fetchFloorPrices = async (collectionIds: string[]) => {
+    try {
+      const uniqueCollectionIds = [...new Set(collectionIds.filter(id => id))];
+      
+      if (uniqueCollectionIds.length === 0) return;
+      
+      const pricePromises = uniqueCollectionIds.map(async (collectionId) => {
+        try {
+          // Use Magic Eden API to get floor price
+          const response = await fetch(`https://api-mainnet.magiceden.dev/v2/collections/${collectionId}/stats`);
+          const data = await response.json();
+          
+          return { 
+            collectionId, 
+            floorPrice: data?.floorPrice ? data.floorPrice / 1e9 : null // Convert lamports to SOL
+          };
+        } catch (error) {
+          console.error(`Error fetching floor price for ${collectionId}:`, error);
+          return { collectionId, floorPrice: null };
+        }
+      });
+      
+      const priceResults = await Promise.all(pricePromises);
+      
+      const floorPricesMap = priceResults.reduce((acc, { collectionId, floorPrice }) => {
+        if (floorPrice !== null) {
+          acc[collectionId] = floorPrice;
+        }
+        return acc;
+      }, {} as {[key: string]: number});
+      
+      setFloorPrices(floorPricesMap);
+      
+    } catch (error) {
+      console.error("Error fetching floor prices:", error);
+    }
+  };
+
   // Function to fetch NFTs from Helius RPC
   const fetchNFTs = async (showLoading = true) => {
     if (showLoading) {
@@ -248,74 +308,39 @@ function App() {
     
     console.log("Fetching NFTs...");
     
-    // Generate high quality mock data
-    const generateMockNFTs = (count = 9): NFTCard[] => {
-      // NFT collection names and themes
-      const collections = [
-        { name: "Solana Monkeys", theme: "Colorful cartoon monkeys in different outfits and poses", price: 85 },
-        { name: "DeGods", theme: "Artistic interpretations of godlike figures with unique traits", price: 320 },
-        { name: "y00ts", theme: "Cute yeti-like characters with various accessories", price: 150 },
-        { name: "Okay Bears", theme: "Cartoon bears with different expressions and clothing", price: 90 },
-        { name: "Solana Degen Apes", theme: "Detailed ape illustrations with futuristic elements", price: 75 },
-        { name: "Aurory", theme: "Fantasy creatures in a vibrant digital world", price: 48 },
-        { name: "Claynosaurz", theme: "Clay-styled dinosaur characters in different colors", price: 32 },
-        { name: "Famous Fox Federation", theme: "Stylized fox illustrations with unique traits", price: 25 },
-        { name: "Shadowy Super Coder", theme: "Mysterious coding characters in the shadows", price: 112 }
-      ];
-      
-      // Status and progress distributions
-      const statuses: CardStatus[] = ['minting', 'progress', 'sold'];
-      
-      // Generate the NFTs
-      return Array.from({ length: count }, (_, i) => {
-        const collection = collections[i % collections.length];
-        const status = statuses[Math.floor(Math.random() * statuses.length)];
-        const progress = status === 'progress' ? 10 + Math.floor(Math.random() * 90) : undefined;
-        
-        return {
-          id: i + 1,
-          title: collection.name,
-          description: collection.theme,
-          price: collection.price + Math.floor(Math.random() * 50),
-          status,
-          progress,
-          rating: 3 + Math.floor(Math.random() * 3), // 3-5 stars (quality collections)
-          isBoosted: Math.random() > 0.5,
-          image: `https://picsum.photos/seed/${collection.name.replace(/\s+/g, '')}_${i}/400/400`,
-          mint: `mint_address_${i}_${Date.now()}`
-        };
-      });
-    };
-    
     try {
       // First try looking for NFTs in HeliusAPI (with a shorter timeout)
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
         
-        // Pick a random wallet to try
-        const sampleWallets = [
-          '4dgi5B8CSERZz46UhfFxm9oW1xZXYpzPjSwYxpTurbTR',
-          'BAqk6CfTi1hM1F98CuVkZQ2JhRhR6rumaqWYU6SFyxoD',
-          'LiKVLf53Y7Wpy6PV8snwBVDhA7YBEVxyjeHSLu7nGCn',
-          'Gpzh6xTLUXdmEZyJQr3t9XrHF5WxAYsGQowzYM4wmgD',
-          'AaYEE8sQpGkM366HibpVHuTj7BXzCxG4mMVyBMS6r6Vj' // Another wallet with NFTs
-        ];
+        // Collections to display for different tabs
+        const tabCollections: Record<string, string[]> = {
+          trending: ['degods', 'y00ts'],
+          recently: ['okay_bears', 'solana_monkey_business'],
+          gradually: ['claynosaurz', 'aurory'],
+          minted: ['degenerate_ape_academy', 'famous_fox_federation'],
+          watchlist: ['shadowy_super_coder_dao', 'cets_on_creck']
+        };
         
-        const randomWallet = sampleWallets[Math.floor(Math.random() * sampleWallets.length)];
-        console.log(`Trying Helius API with wallet ${randomWallet}...`);
+        // Choose collection based on active tab
+        const collections = tabCollections[activeTab] || ['degods', 'y00ts'];
         
+        console.log(`Fetching NFTs for collections: ${collections.join(', ')}`);
+        
+        // Use the Helius getAssetsByGroup endpoint
         const heliusResponse = await fetch('https://mainnet.helius-rpc.com/?api-key=288226ba-2ab1-4ba5-9cae-15fa18dd68d1', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 'my-id',
-            method: 'getAssetsByOwner',
+            method: 'getAssetsByGroup',
             params: {
-              ownerAddress: randomWallet,
+              groupKey: 'collection',
+              groupValue: collections[0],
               page: 1,
-              limit: 9,
+              limit: 12
             },
           }),
           signal: controller.signal
@@ -326,13 +351,42 @@ function App() {
         const heliusData = await heliusResponse.json();
         console.log(`Helius response:`, heliusData);
         
-        if (heliusData.result?.items?.length > 0) {
+        if (heliusData.result?.items && heliusData.result.items.length > 0) {
           console.log(`Found ${heliusData.result.items.length} NFTs from Helius!`);
           
+          // Extract collection IDs to fetch floor prices
+          const collectionIds = heliusData.result.items
+            .map((nft: HeliusNFT) => {
+              return nft.grouping?.collection?.id || 
+                     (nft.content?.metadata?.name || '').toLowerCase().replace(/\s+/g, '_');
+            })
+            .filter(Boolean);
+          
+          // Fetch floor prices for these collections
+          await fetchFloorPrices(collectionIds);
+          
           // Process and use the Helius data
-          const transformedNfts = heliusData.result.items.map((nft: any, index: number) => {
-            const statusOptions: CardStatus[] = ['minting', 'progress', 'sold'];
-            const randomStatus = statusOptions[Math.floor(Math.random() * statusOptions.length)];
+          const transformedNfts = heliusData.result.items.map((nft: HeliusNFT, index: number) => {
+            // Determine status based on collection and position
+            let status: CardStatus;
+            let progress: number | undefined;
+            
+            if (activeTab === 'minted') {
+              status = 'sold';
+            } else if (activeTab === 'gradually') {
+              status = 'progress';
+              progress = 20 + Math.floor(Math.random() * 70); // 20-90% progress
+            } else {
+              // Distribute statuses more realistically
+              const statusIndex = index % 3;
+              if (statusIndex === 0) status = 'minting';
+              else if (statusIndex === 1) status = 'progress';
+              else status = 'sold';
+              
+              if (status === 'progress') {
+                progress = 20 + Math.floor(Math.random() * 70); // 20-90% progress
+              }
+            }
             
             // Extract image URL, handling various formats
             let imageUrl = '';
@@ -350,17 +404,30 @@ function App() {
               imageUrl = `https://picsum.photos/seed/helius${index}/400/400`;
             }
             
+            // Get collection ID for floor price lookup
+            const collectionId = nft.grouping?.collection?.id || 
+                                 (nft.content?.metadata?.name || '').toLowerCase().replace(/\s+/g, '_');
+            
+            // Get floor price if available, otherwise use a reasonable value
+            const price = floorPrices[collectionId] || 
+                          (Math.floor(Math.random() * 80) + 20) / 10; // 2.0 - 10.0 SOL
+            
+            // Build marketplace URL
+            const marketplaceUrl = `https://magiceden.io/item-details/${nft.mint}`;
+            
             return {
               id: index + 1,
               title: nft.content?.metadata?.name || 'Solana NFT',
               description: nft.content?.metadata?.description || 'Exclusive Solana NFT collection.',
-              price: Math.floor(Math.random() * 200) + 50,
+              price: price,
               image: imageUrl,
-              mint: nft.id || nft.mint,
-              status: randomStatus,
+              mint: nft.mint,
+              status: status,
               rating: Math.floor(Math.random() * 3) + 3, // 3-5 stars
-              isBoosted: Math.random() > 0.5,
-              progress: randomStatus === 'progress' ? Math.floor(Math.random() * 90) + 10 : undefined
+              isBoosted: Math.random() > 0.7,
+              progress: progress,
+              collectionId: collectionId,
+              marketplaceUrl: marketplaceUrl
             };
           });
           
@@ -396,6 +463,48 @@ function App() {
     }
   };
   
+  // Generate high quality mock data as fallback
+  const generateMockNFTs = (count = 9): NFTCard[] => {
+    // NFT collection names and themes
+    const collections = [
+      { name: "Solana Monkeys", theme: "Colorful cartoon monkeys in different outfits and poses", price: 85, collectionId: "solana_monkey_business" },
+      { name: "DeGods", theme: "Artistic interpretations of godlike figures with unique traits", price: 320, collectionId: "degods" },
+      { name: "y00ts", theme: "Cute yeti-like characters with various accessories", price: 150, collectionId: "y00ts" },
+      { name: "Okay Bears", theme: "Cartoon bears with different expressions and clothing", price: 90, collectionId: "okay_bears" },
+      { name: "Solana Degen Apes", theme: "Detailed ape illustrations with futuristic elements", price: 75, collectionId: "degenerate_ape_academy" },
+      { name: "Aurory", theme: "Fantasy creatures in a vibrant digital world", price: 48, collectionId: "aurory" },
+      { name: "Claynosaurz", theme: "Clay-styled dinosaur characters in different colors", price: 32, collectionId: "claynosaurz" },
+      { name: "Famous Fox Federation", theme: "Stylized fox illustrations with unique traits", price: 25, collectionId: "famous_fox_federation" },
+      { name: "Shadowy Super Coder", theme: "Mysterious coding characters in the shadows", price: 112, collectionId: "shadowy_super_coder_dao" }
+    ];
+    
+    // Status and progress distributions
+    const statuses: CardStatus[] = ['minting', 'progress', 'sold'];
+    
+    // Generate the NFTs
+    return Array.from({ length: count }, (_, i) => {
+      const collection = collections[i % collections.length];
+      const status = statuses[Math.floor(Math.random() * statuses.length)];
+      const progress = status === 'progress' ? 10 + Math.floor(Math.random() * 90) : undefined;
+      const mint = `mock_mint_${Date.now()}_${i}`;
+      
+      return {
+        id: i + 1,
+        title: collection.name,
+        description: collection.theme,
+        price: collection.price / 10, // Convert to SOL pricing
+        status,
+        progress,
+        rating: 3 + Math.floor(Math.random() * 3), // 3-5 stars (quality collections)
+        isBoosted: Math.random() > 0.5,
+        image: `https://picsum.photos/seed/${collection.name.replace(/\s+/g, '')}_${i}/400/400`,
+        mint: mint,
+        collectionId: collection.collectionId,
+        marketplaceUrl: `https://magiceden.io/marketplace/${collection.collectionId}`
+      };
+    });
+  };
+
   // Handle wallet connection
   const connectWallet = async () => {
     const { solana } = window as PhantomWindow;
@@ -445,7 +554,7 @@ function App() {
       case 'minting':
         return (
           <div style={{ width: '100%', backgroundColor: '#333', height: '24px', borderRadius: '4px', marginTop: '8px', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ width: `100%`, backgroundColor: '#FF4545', height: '100%', borderRadius: '4px' }}></div>
+            <div style={{ width: `100%`, backgroundColor: '#14F195', height: '100%', borderRadius: '4px' }}></div>
             <div style={{ 
               position: 'absolute', 
               top: '0', 
@@ -456,10 +565,10 @@ function App() {
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '12px', 
-              color: 'white',
+              color: 'black',
               fontWeight: 'bold'
             }}>
-              Sold Out
+              Available to Mint
             </div>
           </div>
         );
@@ -514,13 +623,13 @@ function App() {
             }}>
               Sold Out
             </div>
-          </div>
+      </div>
         );
     }
   };
 
-  // Handle mint button click
-  const handleMint = (card: NFTCard) => {
+  // Handle mint button click with real wallet interaction
+  const handleMint = async (card: NFTCard) => {
     if (!isConnected) {
       alert("Please connect your wallet to mint NFTs");
       return;
@@ -531,15 +640,59 @@ function App() {
       return;
     }
     
-    // Add card to minting state
-    if (!mintingCards.includes(card.id)) {
-      setMintingCards([...mintingCards, card.id]);
-      
-      // Simulate minting process
-      setTimeout(() => {
-        alert(`Successfully minted ${card.title}!`);
-        setMintingCards(mintingCards.filter(id => id !== card.id));
-      }, 2000);
+    try {
+      // Add card to minting state
+      if (!mintingCards.includes(card.id)) {
+        setMintingCards([...mintingCards, card.id]);
+        
+        // Access the Phantom wallet
+        const { solana } = window as PhantomWindow;
+        
+        if (!solana || !solana.signTransaction) {
+          throw new Error("Wallet doesn't support transaction signing");
+        }
+        
+        // Create a simple transaction (this would be replaced with actual minting logic)
+        const from = new web3.PublicKey(walletAddress);
+        
+        // Create a transaction
+        const transaction = new web3.Transaction().add(
+          web3.SystemProgram.transfer({
+            fromPubkey: from,
+            toPubkey: from, // Send to self (placeholder)
+            lamports: 0, // No actual transfer
+          })
+        );
+        
+        // Set recent blockhash
+        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        transaction.feePayer = from;
+        
+        // Sign the transaction - this will prompt the user's wallet
+        const signedTransaction = await solana.signTransaction(transaction);
+        
+        // Actually sending the transaction would be done here for a real mint
+        // For demo purposes, we'll console log it but not send it
+        console.log("Transaction signed successfully:", signedTransaction);
+        // const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+        // await connection.confirmTransaction(signature);
+        
+        // Simulate a delay for the minting process
+        setTimeout(() => {
+          alert(`Successfully minted ${card.title}!`);
+          setMintingCards(mintingCards.filter(id => id !== card.id));
+          
+          // Open the NFT in explorer or marketplace
+          const openLink = window.confirm("View your NFT in the marketplace?");
+          if (openLink && card.marketplaceUrl) {
+            window.open(card.marketplaceUrl, '_blank');
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error during minting:", error);
+      alert(`Error during minting: ${(error as Error).message}`);
+      setMintingCards(mintingCards.filter(id => id !== card.id));
     }
   };
 
@@ -547,8 +700,8 @@ function App() {
   const renderMintButton = (card: NFTCard) => {
     const isMinting = mintingCards.includes(card.id);
     
-    // For both 'sold' and 'minting' statuses, show a non-clickable "Sold Out" button
-    if (card.status === 'sold' || card.status === 'minting') {
+    // For both 'sold' and 'minting' statuses, show appropriate buttons
+    if (card.status === 'sold') {
       return (
         <button style={{ 
           background: '#FF4545', 
@@ -565,6 +718,46 @@ function App() {
       );
     }
     
+    if (card.status === 'minting') {
+      return (
+        <button style={{ 
+          background: isMinting ? '#999' : '#14F195', 
+          border: 'none',
+          borderRadius: '5px',
+          padding: '5px 10px',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          cursor: isMinting ? 'default' : 'pointer',
+          color: 'black',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+        disabled={isMinting}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleMint(card);
+        }}>
+          {isMinting ? (
+            <span>Minting...</span>
+          ) : 'Mint Now'}
+          
+          {isMinting && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: '100%',
+              width: '30%',
+              background: 'rgba(255,255,255,0.3)',
+              animation: 'mintingAnimation 1s infinite linear',
+              transform: 'skewX(-20deg)'
+            }}/>
+          )}
+        </button>
+      );
+    }
+    
+    // For 'progress' status
     return (
       <button style={{ 
         background: isMinting ? '#999' : '#14F195', 
@@ -579,7 +772,10 @@ function App() {
         overflow: 'hidden'
       }}
       disabled={isMinting}
-      onClick={() => handleMint(card)}>
+      onClick={(e) => {
+        e.stopPropagation();
+        handleMint(card);
+      }}>
         {isMinting ? (
           <span>Minting...</span>
         ) : 'Mint'}
@@ -615,6 +811,17 @@ function App() {
     fetchNFTs();
   };
 
+  // Handle NFT card click
+  const handleNFTCardClick = (card: NFTCard) => {
+    if (!mintingCards.includes(card.id)) {
+      if (card.marketplaceUrl) {
+        window.open(card.marketplaceUrl, '_blank');
+      } else {
+        alert(`Viewing details for ${card.title}`);
+      }
+    }
+  };
+
   return (
     <div style={{ 
       backgroundColor: '#121212', 
@@ -648,7 +855,7 @@ function App() {
         }}
         onClick={handleRefresh}
         >
-          OwerFlowNFT
+          HypeFlow
         </div>
         
         <div style={{ 
@@ -909,11 +1116,7 @@ function App() {
                 transition: 'transform 0.2s, box-shadow 0.2s',
               }}
               className="nft-card"
-              onClick={() => {
-                if (!mintingCards.includes(card.id)) {
-                  alert(`Viewing details for ${card.title}`);
-                }
-              }}
+              onClick={() => handleNFTCardClick(card)}
               >
                 <div style={{ 
                   padding: '15px',
@@ -967,7 +1170,7 @@ function App() {
                   }}>
                     <div>
                       <div style={{ fontSize: '12px', color: '#999' }}>Price</div>
-                      <div style={{ fontWeight: 'bold' }}>{card.price} SOL</div>
+                      <div style={{ fontWeight: 'bold' }}>{card.price.toFixed(2)} SOL</div>
                     </div>
                     <div onClick={(e) => {
                       e.stopPropagation(); // Prevent card click when clicking the mint button
@@ -1024,7 +1227,7 @@ function App() {
         fontSize: '14px',
         color: '#999'
       }}>
-        © OwerFlowNFT all rights reserved 2025
+        © HypeFlow all rights reserved 2025
       </footer>
       
       <style>
