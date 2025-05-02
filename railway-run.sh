@@ -5,4 +5,4 @@ npm install
 npm run build
 
 # Start the server
-node server.js 
+node server.js
