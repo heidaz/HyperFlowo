@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+// @ts-ignore - no types available for this module
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
@@ -10,16 +11,21 @@ export default defineConfig({
       globals: {
         Buffer: true,
         global: true,
-        process: true,
-      },
+        process: true
+      }
     }),
   ],
-  define: {
-    'process.env': {},
-    'global': {},
-  },
   build: {
     outDir: 'dist',
-    sourcemap: false
-  }
+    sourcemap: true,
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: 'localhost',
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost', 
+    },
+  },
 })

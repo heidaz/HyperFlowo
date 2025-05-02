@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create NFT - HypeFlow</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      color: white;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      align-items: center;
+    }
+    
+    .logo {
+      font-size: 28px;
+      font-weight: bold;
+      background: linear-gradient(to right, #9945FF, #14F195);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      cursor: pointer;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      flex: 1;
+    }
+    
+    h1 {
+      text-align: center;
+      margin-bottom: 40px;
+      background: linear-gradient(to right, #9945FF, #14F195);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    
+    input[type="text"],
+    input[type="number"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #333;
+      background-color: #1A1A1A;
+      color: white;
+      box-sizing: border-box;
+    }
+    
+    textarea {
+      height: 100px;
+      resize: vertical;
+    }
+    
+    .image-upload {
+      border: 2px dashed #333;
+      padding: 20px;
+      text-align: center;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      cursor: pointer;
+      position: relative;
+    }
+    
+    .image-upload:hover {
+      border-color: #14F195;
+    }
+    
+    .image-preview {
+      max-width: 100%;
+      max-height: 200px;
+      margin-top: 10px;
+      display: none;
+    }
+    
+    .attributes-container {
+      margin-top: 20px;
+    }
+    
+    .attribute-item {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .attribute-item input {
+      flex: 1;
+    }
+    
+    .button-container {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 30px;
+    }
+    
+    .add-attribute-btn {
+      background-color: #333;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    
+    .add-attribute-btn:hover {
+      background-color: #444;
+    }
+    
+    .btn {
+      padding: 12px 24px;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(to right, #9945FF, #14F195);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    
+    .btn-secondary {
+      background-color: #333;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background-color: #444;
+    }
+    
+    #mintingStatus {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 5px;
+      background-color: #1A1A1A;
+      display: none;
+    }
+    
+    .status-message {
+      margin-bottom: 10px;
+    }
+    
+    .progress-container {
+      width: 100%;
+      height: 8px;
+      background-color: #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(to right, #9945FF, #14F195);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    
+    footer {
+      text-align: center;
+      padding: 20px;
+      border-top: 1px solid #333;
+      font-size: 14px;
+      color: #999;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 15px;
+      }
+      
+      .button-container {
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo" onclick="window.location.href='/'">HypeFlow</div>
+    <button class="btn btn-secondary" onclick="window.location.href='/'">Back to Marketplace</button>
+  </header>
+  
+  <div class="container">
+    <h1>Create Your NFT</h1>
+    
+    <div class="form-group">
+      <label for="name">NFT Name</label>
+      <input type="text" id="name" placeholder="e.g. Awesome NFT #1" required>
+    </div>
+    
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" placeholder="Describe your NFT..." required></textarea>
+    </div>
+    
+    <div class="form-group">
+      <label for="image">NFT Image</label>
+      <div class="image-upload" id="dropZone">
+        <p>Drag & drop your image here or click to select</p>
+        <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+        <img id="preview" class="image-preview">
+      </div>
+    </div>
+    
+    <div class="form-group">
+      <label for="collection">Collection Name</label>
+      <input type="text" id="collection" placeholder="e.g. My Awesome Collection">
+    </div>
+    
+    <div class="form-group">
+      <label for="royalty">Royalty Percentage (0-10%)</label>
+      <input type="number" id="royalty" min="0" max="10" value="5">
+    </div>
+    
+    <div class="form-group">
+      <label>Attributes</label>
+      <div id="attributesContainer" class="attributes-container">
+        <div class="attribute-item">
+          <input type="text" placeholder="Trait Type (e.g. Background)">
+          <input type="text" placeholder="Value (e.g. Blue)">
+        </div>
+      </div>
+      <button class="add-attribute-btn" id="addAttributeBtn">+ Add Attribute</button>
+    </div>
+    
+    <div class="button-container">
+      <button class="btn btn-secondary" onclick="window.location.href='/'">Cancel</button>
+      <button class="btn btn-primary" id="createNFTButton">Create NFT</button>
+    </div>
+    
+    <div id="mintingStatus">
+      <div class="status-message" id="statusText">Preparing to mint your NFT...</div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+  </div>
+  
+  <footer>
+    © HypeFlow all rights reserved 2025
+  </footer>
+  
+  <script>
+    // Initialize variables
+    let imageFile = null;
+    
+    // DOM elements
+    const dropZone = document.getElementById('dropZone');
+    const imageUpload = document.getElementById('imageUpload');
+    const preview = document.getElementById('preview');
+    const attributesContainer = document.getElementById('attributesContainer');
+    const addAttributeBtn = document.getElementById('addAttributeBtn');
+    const createNFTButton = document.getElementById('createNFTButton');
+    const mintingStatus = document.getElementById('mintingStatus');
+    const statusText = document.getElementById('statusText');
+    const progressBar = document.getElementById('progressBar');
+    
+    // Handle image upload via click
+    dropZone.addEventListener('click', () => {
+      imageUpload.click();
+    });
+    
+    // Handle image upload via drag & drop
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#14F195';
+    });
+    
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = '#333';
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#333';
+      
+      if (e.dataTransfer.files.length) {
+        handleImageFile(e.dataTransfer.files[0]);
+      }
+    });
+    
+    // Handle image file selection
+    imageUpload.addEventListener('change', () => {
+      if (imageUpload.files.length) {
+        handleImageFile(imageUpload.files[0]);
+      }
+    });
+    
+    // Process the selected image file
+    function handleImageFile(file) {
+      if (!file.type.match('image.*')) {
+        alert('Please select an image file.');
+        return;
+      }
+      
+      imageFile = file;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // Add new attribute fields
+    addAttributeBtn.addEventListener('click', () => {
+      const attributeItem = document.createElement('div');
+      attributeItem.className = 'attribute-item';
+      
+      const traitInput = document.createElement('input');
+      traitInput.type = 'text';
+      traitInput.placeholder = 'Trait Type (e.g. Background)';
+      
+      const valueInput = document.createElement('input');
+      valueInput.type = 'text';
+      valueInput.placeholder = 'Value (e.g. Blue)';
+      
+      attributeItem.appendChild(traitInput);
+      attributeItem.appendChild(valueInput);
+      
+      attributesContainer.appendChild(attributeItem);
+    });
+    
+    // Handle NFT creation
+    createNFTButton.addEventListener('click', async () => {
+      // Validate form
+      const name = document.getElementById('name').value;
+      const description = document.getElementById('description').value;
+      
+      if (!name || !description || !imageFile) {
+        alert('Please fill in all required fields and upload an image.');
+        return;
+      }
+      
+      // Show minting status
+      mintingStatus.style.display = 'block';
+      createNFTButton.disabled = true;
+      
+      // Simulate the NFT creation process
+      await simulateNFTCreation();
+      
+      // Reset form after successful mint
+      resetForm();
+    });
+    
+    // Simulate the NFT creation process (in a real application, this would interact with Arweave and Solana)
+    async function simulateNFTCreation() {
+      // Step 1: Upload image
+      updateStatus('Uploading image to Arweave...', 10);
+      await simulateStep(2000);
+      
+      // Step 2: Create metadata
+      updateStatus('Creating NFT metadata...', 30);
+      await simulateStep(1500);
+      
+      // Step 3: Upload metadata
+      updateStatus('Uploading metadata to Arweave...', 50);
+      await simulateStep(2000);
+      
+      // Step 4: Mint NFT on Solana
+      updateStatus('Minting NFT on Solana blockchain...', 70);
+      await simulateStep(2500);
+      
+      // Step 5: Finalizing
+      updateStatus('Finalizing and verifying transaction...', 90);
+      await simulateStep(1000);
+      
+      // Complete
+      updateStatus('NFT created successfully! 🎉', 100);
+      
+      // Show success message
+      setTimeout(() => {
+        alert('Your NFT has been created successfully! It will appear in the marketplace soon.');
+        mintingStatus.style.display = 'none';
+        createNFTButton.disabled = false;
+      }, 1500);
+    }
+    
+    // Update status display
+    function updateStatus(message, progress) {
+      statusText.textContent = message;
+      progressBar.style.width = `${progress}%`;
+    }
+    
+    // Simulate an async operation
+    function simulateStep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    
+    // Reset form after submission
+    function resetForm() {
+      document.getElementById('name').value = '';
+      document.getElementById('description').value = '';
+      document.getElementById('collection').value = '';
+      document.getElementById('royalty').value = '5';
+      preview.style.display = 'none';
+      imageFile = null;
+      
+      // Reset attributes (keep the first one)
+      while (attributesContainer.children.length > 1) {
+        attributesContainer.removeChild(attributesContainer.lastChild);
+      }
+      
+      // Clear the first attribute fields
+      const firstAttribute = attributesContainer.children[0];
+      if (firstAttribute) {
+        firstAttribute.children[0].value = '';
+        firstAttribute.children[1].value = '';
+      }
+    }
+  </script>
+</body>
+</html> 

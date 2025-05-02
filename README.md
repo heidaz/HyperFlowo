@@ -1,4 +1,4 @@
-# Solana NFT Marketplace
+# HypeFlow - Solana NFT Marketplace
 
 A lightweight NFT marketplace for Solana.
 

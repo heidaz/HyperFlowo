@@ -21,4 +21,7 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   serve.kill('SIGTERM');
-}); 
+});
+
+// Simple wrapper around server.js for Railway
+require('./server'); 
